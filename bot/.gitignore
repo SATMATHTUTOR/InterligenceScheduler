@@ -64,11 +64,3 @@ node_modules/
 
 # dotenv environment variables file
 .env
-
-# Firebase related
-firebase-adminsdk.json
-firebase-key.json
-firebase-service-account.json
-
-# Python virtual environment
-venv/
