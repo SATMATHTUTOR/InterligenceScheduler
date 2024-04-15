@@ -43,9 +43,6 @@ exports.webhook = onRequest(async (req, res) => {
                 time,
                 day,
                 teacherName,
-                money: "N/A", // Assuming this is not provided in the message
-                studentName: "N/A", // Assuming this is not provided in the message
-                type: "N/A", // Assuming this is not provided in the message
               });
 
               const linePayload = [{ type: "text", text: successMessage }];
@@ -122,4 +119,3 @@ const reply = async (token, payload) => {
 
   return response;
 };
-//
