@@ -29,16 +29,23 @@ const writeToGoogleSheet = async (sheets, data) => {
 
   try {
     for (const timeSlot of timeSlotsData) {
-      const subsetName = data.teacherName; // Use teacher name as the subset (sheet) name
-      const row = data.day; // Use day as the row index
-      const columnIndex = getColumnIndex(timeSlot[0]); // Get the column index based on the start time
+      const subsetName = data.teacherName;
+      const daysOfWeek = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+      ];
+      const columnIndex = getColumnIndex(timeSlot[0]);
+      const dayIndex = daysOfWeek.indexOf(data.day) + 2;
 
       const range = `${subsetName}!${getColumnLetter(
         columnIndex
-      )}${row}:${getColumnLetter(columnIndex + 1)}${row}`; // Update range to match the correct slot
-      const values = [timeSlot];
+      )}${dayIndex}:${getColumnLetter(columnIndex)}${dayIndex}`;
 
-      // Check if the target slot is empty
       const checkResponse = await sheets.spreadsheets.values.get({
         spreadsheetId,
         range,
@@ -47,14 +54,13 @@ const writeToGoogleSheet = async (sheets, data) => {
       const existingValue = checkResponse?.data?.values?.[0]?.[0];
 
       if (!existingValue) {
-        // Target slot is empty, write data
         const response = await sheets.spreadsheets.values.append({
           spreadsheetId,
           range,
           auth: client,
           valueInputOption: "USER_ENTERED",
           resource: {
-            values,
+            values: ["จองแล้ว"],
           },
         });
 
@@ -63,21 +69,8 @@ const writeToGoogleSheet = async (sheets, data) => {
           response.data
         );
       } else {
-        // Target slot is not empty, write "ไม่ว่าง" (Not Available)
-        const response = await sheets.spreadsheets.values.append({
-          spreadsheetId,
-          range,
-          auth: client,
-          valueInputOption: "USER_ENTERED",
-          resource: {
-            values: [["ไม่ว่าง"]],
-          },
-        });
-
-        console.log(
-          `Slot not empty, wrote "ไม่ว่าง" to Google Sheet (${subsetName}):`,
-          response.data
-        );
+        successMessage = `Slot already filled at ${timeSlot[0]}, ${timeSlot[1]}. Sending a message and doing nothing.`;
+        return successMessage;
       }
     }
 
