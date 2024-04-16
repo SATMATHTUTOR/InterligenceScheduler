@@ -13,25 +13,41 @@ const writeToGoogleSheet = async (sheets, data) => {
 
   const [startTime, endTime] = data.time.split("-");
 
-  const timeSlots = (parseInt(endTime) - parseInt(startTime)) * 2;
+  const startHour = parseInt(startTime.split(".")[0]);
+  const startMinute = parseInt(startTime.split(".")[1]) || 0; // Handle cases where minutes are not provided
+
+  const endHour = parseInt(endTime.split(".")[0]);
+  const endMinute = parseInt(endTime.split(".")[1]) || 0; // Handle cases where minutes are not provided
+
+  const timeSlots = Math.ceil(
+    ((endHour - startHour) * 60 + (endMinute - startMinute)) / 30
+  );
 
   const timeSlotsData = [];
 
   let isFull = false;
-  let timeSlot; // Declare timeSlot outside the loop
 
   for (let i = 0; i < timeSlots; i++) {
-    const slotStartTime = `${parseInt(startTime) + Math.floor(i / 2)}:${
-      i % 2 === 0 ? "00" : "30"
-    }`;
-    const slotEndTime = `${parseInt(startTime) + Math.floor(i / 2)}:${
-      i % 2 === 0 ? "30" : "00"
-    }`;
+    const slotStartHour = startHour + Math.floor((startMinute + i * 30) / 60);
+    const slotStartMinute = (startMinute + i * 30) % 60;
+
+    const slotStartTime = `${slotStartHour}:${slotStartMinute
+      .toString()
+      .padStart(2, "0")}`;
+
+    const slotEndHour =
+      startHour + Math.floor((startMinute + (i + 1) * 30) / 60);
+    const slotEndMinute = (startMinute + (i + 1) * 30) % 60;
+
+    const slotEndTime = `${slotEndHour}:${slotEndMinute
+      .toString()
+      .padStart(2, "0")}`;
+
     timeSlotsData.push([slotStartTime, slotEndTime]);
   }
 
   try {
-    for (timeSlot of timeSlotsData) {
+    for (const timeSlot of timeSlotsData) {
       const subsetName = data.teacherName;
       const daysOfWeek = [
         "Monday",
@@ -42,8 +58,8 @@ const writeToGoogleSheet = async (sheets, data) => {
         "Saturday",
         "Sunday",
       ];
-      const columnIndex = getColumnIndex(timeSlot[0]);
-      const dayIndex = daysOfWeek.indexOf(data.day) + 2;
+      const columnIndex = getSheetColumnIndex(timeSlot[0]);
+      const dayIndex = daysOfWeek.indexOf(data.day) + 2; // Increase index by 2
 
       const range = `${subsetName}!${getColumnLetter(
         columnIndex
@@ -73,9 +89,7 @@ const writeToGoogleSheet = async (sheets, data) => {
         );
       } else {
         console.log(
-          `Slot already filled at ${timeSlot[0]}, ${
-            timeSlot[-1]
-          }. Sending a message and doing nothing.`
+          `Slot already filled at ${timeSlot[0]}, ${timeSlot[1]}. Sending a message and doing nothing.`
         );
         isFull = true;
       }
@@ -95,12 +109,18 @@ const writeToGoogleSheet = async (sheets, data) => {
     throw error;
   }
 };
+const getSheetColumnIndex = (startTime) => {
+  const [hoursStr, minutesStr] = startTime.split(":");
+  const hours = parseInt(hoursStr);
+  const minutes = parseInt(minutesStr);
 
-const getColumnIndex = (startTime) => {
-  const hours = parseInt(startTime.split(":")[0]);
-  const minutes = parseInt(startTime.split(":")[1]);
+  let columnIndex = (hours - 8) * 2; // Start from 8:00 AM
 
-  return (hours - 8) * 2 + (minutes === 30 ? 1 : 0) + 1;
+  if (minutes >= 30) {
+    columnIndex += 1; // Adjust index for .30 case
+  }
+
+  return columnIndex + 2; // Adjusted index by 2
 };
 
 const getColumnLetter = (index) => {
@@ -113,50 +133,170 @@ const getColumnLetter = (index) => {
     : letters.charAt(remainder);
 };
 
-const getConsecutiveAvailableSlots = async (sheets, teacherName) => {
-  const bookedSlots = await getAvailableSlots(sheets, teacherName);
-  const availableSlots = [];
-  let currentSlot = null;
+const getAvailableSlots = async (sheets, subsetName) => {
+  const credentials = require("./credentials.json");
+  const client = await auth.getClient({
+    credentials,
+    scopes: "https://www.googleapis.com/auth/spreadsheets",
+  });
 
-  for (const slot of bookedSlots) {
-    if (slot !== "จองแล้ว") {
-      if (!currentSlot) {
-        currentSlot = { start: slot, end: slot };
-      } else if (slot === incrementTime(currentSlot.end)) {
-        currentSlot.end = slot;
+  const spreadsheetId = process.env.SPREADSHEET_ID;
+
+  const daysOfWeek = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ];
+  const columnTime = [
+    "8.00-8.30",
+    "8.30-9.00",
+    "9.00-9.30",
+    "9.30-10.00",
+    "10.00-10.30",
+    "10.30-11.00",
+    "11.00-11.30",
+    "11.30-12.00",
+    "12.00-12.30",
+    "12.30-13.00",
+    "13.00-13.30",
+    "13.30-14.00",
+    "14.00-14.30",
+    "14.30-15.00",
+    "15.00-15.30",
+    "15.30-16.00",
+    "16.00-16.30",
+    "16.30-17.00",
+    "17.00-17.30",
+    "17.30-18.00",
+    "18.00-18.30",
+    "18.30-19.00",
+    "19.00-19.30",
+    "19.30-20.00",
+    "20.00-20.30",
+    "20.30-21.00",
+    "21.00-21.30",
+    "21.30-22.00",
+  ];
+
+  try {
+    const range = `${subsetName}!B2:AC8`; // Define the range for the time slots
+
+    // Retrieve the data from the spreadsheet
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range,
+      auth: client,
+    });
+
+    const data = response?.data?.values;
+    // Create 7 arrays for 7 days
+    const weekArray = [[], [], [], [], [], [], []];
+
+    for (let i = 0; i < 7; i++) {
+      if (!data[i] || data[i].length < 28) {
+        const slots = data[i] || [];
+        weekArray[i] = slots.concat(
+          Array.from({ length: 28 - slots.length }, () => "")
+        );
       } else {
-        availableSlots.push(currentSlot);
-        currentSlot = { start: slot, end: slot };
-      }
-    } else {
-      if (currentSlot) {
-        availableSlots.push(currentSlot);
-        currentSlot = null;
+        const slots = data[i].slice(0, 28);
+        weekArray[i] = slots.map((slot) => (slot === "จองแล้ว" ? slot : ""));
       }
     }
-  }
 
-  if (currentSlot) {
-    availableSlots.push(currentSlot);
-  }
+    const bookedSlots = {};
+    for (let i = 0; i < 7; i++) {
+      bookedSlots[daysOfWeek[i]] = weekArray[i].reduce((acc, slot, index) => {
+        if (slot === "จองแล้ว") {
+          acc.push(columnTime[index]);
+        }
+        return acc;
+      }, []);
+    }
 
-  console.log(
-    `Consecutive available slots for ${teacherName}:`,
-    availableSlots
-  );
-  return availableSlots;
+    const bookedSlotText = Object.keys(bookedSlots)
+      .map((day) => {
+        return `${day}: ${bookedSlots[day].join(", ") || "No slots booked"}`;
+      })
+      .join("\n");
+
+    console.log(bookedSlotText);
+
+    const mergedBookedSlots = mergeTimeSlots(bookedSlotText);
+    const sortedBookedSlots = sortTimeSlots(mergedBookedSlots);
+
+    const message = `Available slots for ${subsetName}:\n${sortedBookedSlots}`;
+    return message;
+  } catch (error) {
+    console.error("Error getting available slots:", error);
+    throw error;
+  }
 };
 
-// Helper function to increment time by 30 minutes
-const incrementTime = (time) => {
-  const [hours, minutes] = time.split(":").map(Number);
-  const newMinutes = (minutes + 30) % 60;
-  const newHours = hours + Math.floor((minutes + 30) / 60);
-  return `${String(newHours).padStart(2, "0")}:${String(newMinutes).padStart(
-    2,
-    "0"
-  )}`;
-};
+function mergeTimeSlots(slotsText) {
+  // Convert the text into an array of objects
+  const slotsArray = slotsText
+    .split("\n")
+    .filter((slot) => slot.trim() !== "")
+    .map((slot) => {
+      const [day, timeSlot] = slot.split(": ");
+      const times = timeSlot.split(", ");
+      return { day, times };
+    });
+
+  // Sort the array based on day and time
+  slotsArray.sort((a, b) => {
+    if (a.day < b.day) return -1;
+    if (a.day > b.day) return 1;
+    return 0;
+  });
+
+  // Merge consecutive time slots for each day
+  const mergedSlots = [];
+  slotsArray.forEach((slot) => {
+    const mergedTimes = [];
+    let currentSlot = slot.times[0];
+    for (let i = 1; i < slot.times.length; i++) {
+      const [start1, end1] = currentSlot.split("-");
+      const [start2, end2] = slot.times[i].split("-");
+      if (end1 === start2) {
+        currentSlot = `${start1}-${end2}`;
+      } else {
+        mergedTimes.push(currentSlot);
+        currentSlot = slot.times[i];
+      }
+    }
+    mergedTimes.push(currentSlot);
+    mergedSlots.push({ day: slot.day, times: mergedTimes });
+  });
+
+  return mergedSlots;
+}
+
+function sortTimeSlots(slotsText) {
+  // Convert the text into an array of objects
+  const slotsArray = slotsText
+    .split("\n")
+    .filter((slot) => slot.trim() !== "")
+    .map((slot) => {
+      const [day, timeSlot] = slot.split(": ");
+      const times = timeSlot.split(", ");
+      return { day, times };
+    });
+
+  // Sort the array based on day
+  slotsArray.sort((a, b) => {
+    if (a.day < b.day) return -1;
+    if (a.day > b.day) return 1;
+    return 0;
+  });
+
+  return slotsArray;
+}
 
 module.exports = {
   writeToGoogleSheet,
