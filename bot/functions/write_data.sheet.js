@@ -226,11 +226,23 @@ const getAvailableSlots = async (sheets, subsetName) => {
 
     console.log(bookedSlotText);
 
-    const mergedBookedSlots = mergeTimeSlots(bookedSlotText);
-    const sortedBookedSlots = sortTimeSlots(mergedBookedSlots);
+    const bookedSlotArray = mergeTimeSlots(bookedSlotText);
 
-    const message = `Available slots for ${subsetName}:\n${sortedBookedSlots}`;
-    return message;
+    // Sort bookedSlotArray using daysOfWeek
+    const sortedBookedSlotArray = bookedSlotArray.sort((a, b) => {
+      const dayAIndex = daysOfWeek.indexOf(a.day);
+      const dayBIndex = daysOfWeek.indexOf(b.day);
+      return dayAIndex - dayBIndex;
+    });
+
+    // Create the message
+    const message = sortedBookedSlotArray
+      .map((slot) => {
+        return `${slot.day}: ${slot.times.join(", ") || "No slots booked"}`;
+      })
+      .join("\n");
+    const formatmsg = `เวลาที่ ${subsetName} สอน\n${message}`;
+    return formatmsg;
   } catch (error) {
     console.error("Error getting available slots:", error);
     throw error;
@@ -275,27 +287,6 @@ function mergeTimeSlots(slotsText) {
   });
 
   return mergedSlots;
-}
-
-function sortTimeSlots(slotsText) {
-  // Convert the text into an array of objects
-  const slotsArray = slotsText
-    .split("\n")
-    .filter((slot) => slot.trim() !== "")
-    .map((slot) => {
-      const [day, timeSlot] = slot.split(": ");
-      const times = timeSlot.split(", ");
-      return { day, times };
-    });
-
-  // Sort the array based on day
-  slotsArray.sort((a, b) => {
-    if (a.day < b.day) return -1;
-    if (a.day > b.day) return 1;
-    return 0;
-  });
-
-  return slotsArray;
 }
 
 module.exports = {
