@@ -22,11 +22,11 @@ exports.webhook = onRequest(async (req, res) => {
           const messageText = event.message.text.trim().toLowerCase();
 
           if (messageText.startsWith("sbot")) {
-            if (messageText.includes("ว่าง")) {
+            if (messageText.includes("สอน")) {
               const { teacherName } = parseAvailableMessage(messageText);
               if (!teacherName) {
                 const invalidFormatMessage =
-                  "❌ Invalid format ❌\nFormat: sbot Teacher ว่าง";
+                  "❌ Invalid format ❌\nFormat: sbot Teacher สอน";
                 return reply(event.replyToken, [
                   { type: "text", text: invalidFormatMessage },
                 ]);
@@ -123,7 +123,7 @@ const parseMessage = (message) => {
 };
 
 const parseAvailableMessage = (message) => {
-  const match = message.match(/^sbot\s+([^/]+)\s*ว่าง/i);
+  const match = message.match(/^sbot\s+([^/]+)\s*สอน/i);
   if (match) {
     const [, teacherName] = match;
     return {
