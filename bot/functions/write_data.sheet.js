@@ -17,6 +17,9 @@ const writeToGoogleSheet = async (sheets, data) => {
 
   const timeSlotsData = [];
 
+  let isFull = false;
+  let timeSlot; // Declare timeSlot outside the loop
+
   for (let i = 0; i < timeSlots; i++) {
     const slotStartTime = `${parseInt(startTime) + Math.floor(i / 2)}:${
       i % 2 === 0 ? "00" : "30"
@@ -28,7 +31,7 @@ const writeToGoogleSheet = async (sheets, data) => {
   }
 
   try {
-    for (const timeSlot of timeSlotsData) {
+    for (timeSlot of timeSlotsData) {
       const subsetName = data.teacherName;
       const daysOfWeek = [
         "Monday",
@@ -60,7 +63,7 @@ const writeToGoogleSheet = async (sheets, data) => {
           auth: client,
           valueInputOption: "USER_ENTERED",
           resource: {
-            values: ["จองแล้ว"],
+            values: [["จองแล้ว"]],
           },
         });
 
@@ -69,14 +72,24 @@ const writeToGoogleSheet = async (sheets, data) => {
           response.data
         );
       } else {
-        successMessage = `Slot already filled at ${timeSlot[0]}, ${timeSlot[1]}. Sending a message and doing nothing.`;
-        return successMessage;
+        console.log(
+          `Slot already filled at ${timeSlot[0]}, ${
+            timeSlot[-1]
+          }. Sending a message and doing nothing.`
+        );
+        isFull = true;
       }
     }
 
-    const successMessage = `Data successfully written to Google Sheet (${data.day})`;
-    console.log("Total Money Received by Teachers");
-    return successMessage;
+    if (isFull) {
+      const message = `Slot already filled Please choose another slot.`;
+      console.log(message);
+      return message;
+    } else {
+      const successMessage = `Data successfully written to Google Sheet (${data.day})+ (${data.teacherName}): ${data.time} (${type}`;
+      console.log("Total Money Received by Teachers");
+      return successMessage;
+    }
   } catch (error) {
     console.error("Error writing to Google Sheet:", error);
     throw error;
@@ -100,6 +113,52 @@ const getColumnLetter = (index) => {
     : letters.charAt(remainder);
 };
 
+const getConsecutiveAvailableSlots = async (sheets, teacherName) => {
+  const bookedSlots = await getAvailableSlots(sheets, teacherName);
+  const availableSlots = [];
+  let currentSlot = null;
+
+  for (const slot of bookedSlots) {
+    if (slot !== "จองแล้ว") {
+      if (!currentSlot) {
+        currentSlot = { start: slot, end: slot };
+      } else if (slot === incrementTime(currentSlot.end)) {
+        currentSlot.end = slot;
+      } else {
+        availableSlots.push(currentSlot);
+        currentSlot = { start: slot, end: slot };
+      }
+    } else {
+      if (currentSlot) {
+        availableSlots.push(currentSlot);
+        currentSlot = null;
+      }
+    }
+  }
+
+  if (currentSlot) {
+    availableSlots.push(currentSlot);
+  }
+
+  console.log(
+    `Consecutive available slots for ${teacherName}:`,
+    availableSlots
+  );
+  return availableSlots;
+};
+
+// Helper function to increment time by 30 minutes
+const incrementTime = (time) => {
+  const [hours, minutes] = time.split(":").map(Number);
+  const newMinutes = (minutes + 30) % 60;
+  const newHours = hours + Math.floor((minutes + 30) / 60);
+  return `${String(newHours).padStart(2, "0")}:${String(newMinutes).padStart(
+    2,
+    "0"
+  )}`;
+};
+
 module.exports = {
   writeToGoogleSheet,
+  getAvailableSlots,
 };
